@@ -8,3 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+
+#test files
+test_output
+**test**
