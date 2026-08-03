@@ -7,6 +7,8 @@ requires-python = ">=3.12"
 dependencies = [
     "chromadb>=1.5.9",
     "llama-index>=0.14.23",
+    "pymupdf>=1.28.0",
+    "python-docx>=1.2.0",
     "python-dotenv>=1.2.2",
     "streamlit>=1.60.0",
 ]
