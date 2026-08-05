@@ -22,6 +22,7 @@ from llama_index.core import Document
 from app.chunkers.chunker import Chunker, ChunkMode
 from app.embeddings import EmbeddingManager
 from app.loaders import DocumentLoader
+from app.retriever import Retriever
 from app.vectorstore import VectorStore
 
 
@@ -61,6 +62,17 @@ class IngestionPipeline:
         self.vector_store  = vector_store or VectorStore(
             embed_manager=self.embed_manager
         )
+        self._retriever: Optional[Retriever] = None
+
+    @property
+    def retriever(self) -> Retriever:
+        """Pipeline'ın VectorStore'una bağlı Retriever (lazy)."""
+        if self._retriever is None:
+            self._retriever = Retriever(
+                vector_store=self.vector_store,
+                embed_manager=self.embed_manager,
+            )
+        return self._retriever
 
     # ------------------------------------------------------------------
     # Public API

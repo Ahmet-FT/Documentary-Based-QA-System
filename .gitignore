@@ -12,3 +12,5 @@ wheels/
 #test files
 test_output
 **test**
+chroma_db
+test_document
