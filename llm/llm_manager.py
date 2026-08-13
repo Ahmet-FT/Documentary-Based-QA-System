@@ -40,6 +40,7 @@ DEFAULT_TIMEOUT     = 120          # saniye
 DEFAULT_TEMPERATURE = 0.1          # Düşük = daha deterministik (RAG için ideal)
 DEFAULT_NUM_CTX     = 4096         # Context window boyutu
 DEFAULT_TOP_P       = 0.9
+DEFAULT_NUM_GPU     = -1           # -1 = tüm katmanları GPU'ya yükle
 DEFAULT_REPEAT_PENALTY = 1.1       # Tekrar cezası
 
 
@@ -103,6 +104,7 @@ class LLMManager:
         num_ctx:        int   = DEFAULT_NUM_CTX,
         top_p:          float = DEFAULT_TOP_P,
         repeat_penalty: float = DEFAULT_REPEAT_PENALTY,
+        num_gpu:        int   = DEFAULT_NUM_GPU,
         timeout:        int   = DEFAULT_TIMEOUT,
     ) -> None:
         self.model          = model
@@ -111,6 +113,7 @@ class LLMManager:
         self.num_ctx        = num_ctx
         self.top_p          = top_p
         self.repeat_penalty = repeat_penalty
+        self.num_gpu        = num_gpu
         self.timeout        = timeout
 
     # ------------------------------------------------------------------
@@ -210,6 +213,7 @@ class LLMManager:
                 "num_ctx":        num_ctx or self.num_ctx,
                 "top_p":          self.top_p,
                 "repeat_penalty": self.repeat_penalty,
+                "num_gpu":        self.num_gpu,
             },
         }
 
@@ -253,6 +257,7 @@ class LLMManager:
                 "num_ctx":        num_ctx or self.num_ctx,
                 "top_p":          self.top_p,
                 "repeat_penalty": self.repeat_penalty,
+                "num_gpu":        self.num_gpu,
             },
         }
 
