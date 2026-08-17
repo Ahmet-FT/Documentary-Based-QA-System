@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kaynak Göstermeli Soru-Cevap Sistemi</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a1a;--bg2:#0f0f23;--card:#1a1a2e;--card2:#16213e;
+  --border:rgba(99,102,241,.25);--primary:#6366f1;--primary2:#8b5cf6;
+  --accent:#38bdf8;--ok:#34d399;--warn:#fbbf24;--err:#f87171;
+  --t1:#e2e8f0;--t2:#94a3b8;--t3:#64748b;
+}
+html,body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--t1);min-height:100vh}
+a{color:var(--accent)}
+button{font-family:inherit;cursor:pointer;border:none;outline:none}
+
+/* Layout */
+.app{max-width:960px;margin:0 auto;padding:20px}
+.hero{text-align:center;padding:24px 0 8px}
+.hero h1{font-size:2rem;font-weight:700;background:linear-gradient(135deg,#818cf8,#c084fc,#38bdf8);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero p{color:var(--t2);font-size:.9rem;margin-top:4px}
+
+/* Status bar */
+.status-bar{display:flex;gap:12px;justify-content:center;padding:12px;margin:12px 0;
+  background:var(--card);border:1px solid var(--border);border-radius:12px;font-size:.82rem}
+.status-item{display:flex;align-items:center;gap:5px}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.dot.on{background:var(--ok)}.dot.off{background:var(--err)}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;margin:16px 0;border-bottom:2px solid rgba(99,102,241,.15);padding-bottom:0}
+.tab-btn{padding:10px 20px;background:transparent;color:var(--t2);font-weight:500;font-size:.88rem;
+  border-radius:8px 8px 0 0;transition:.2s;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab-btn:hover{color:var(--t1);background:rgba(99,102,241,.08)}
+.tab-btn.active{color:#818cf8;border-bottom-color:#818cf8;background:rgba(99,102,241,.1)}
+.tab-content{display:none;animation:fadeIn .3s}.tab-content.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Cards */
+.card{background:linear-gradient(135deg,var(--card),var(--card2));border:1px solid var(--border);
+  border-radius:14px;padding:20px;margin:12px 0}
+.section-title{font-size:1rem;font-weight:600;color:var(--t1);margin-bottom:12px;
+  padding-bottom:6px;border-bottom:2px solid rgba(99,102,241,.3)}
+
+/* Forms */
+input[type=text],input[type=number],textarea,select{
+  width:100%;padding:10px 14px;background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:8px;color:var(--t1);font-family:inherit;font-size:.88rem;outline:none;transition:.2s}
+input:focus,textarea:focus,select:focus{border-color:var(--primary)}
+select option{background:var(--card);color:var(--t1)}
+label{font-size:.82rem;color:var(--t2);margin-bottom:4px;display:block;font-weight:500}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.form-group{margin-bottom:12px}
+
+/* Buttons */
+.btn{padding:10px 20px;border-radius:8px;font-weight:600;font-size:.88rem;transition:.2s}
+.btn-primary{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff}
+.btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none}
+.btn-danger{background:rgba(248,113,113,.15);color:var(--err);border:1px solid rgba(248,113,113,.3)}
+.btn-danger:hover{background:rgba(248,113,113,.25)}
+.btn-sm{padding:6px 14px;font-size:.8rem}
+.btn-full{width:100%}
+
+/* Upload zone */
+.drop-zone{border:2px dashed var(--border);border-radius:12px;padding:32px;text-align:center;
+  color:var(--t3);transition:.2s;cursor:pointer}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--primary);background:rgba(99,102,241,.06)}
+.drop-zone .icon{font-size:2.2rem;margin-bottom:8px}
+.file-input{display:none}
+
+/* File list */
+.file-chip{display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,.1);
+  border:1px solid var(--border);border-radius:6px;padding:4px 10px;margin:3px;font-size:.8rem;color:#a5b4fc}
+
+/* Answer */
+.answer-card{background:linear-gradient(135deg,#1e1e3f,#16213e);border:1px solid rgba(99,102,241,.3);
+  border-radius:14px;padding:20px 24px;margin:14px 0;line-height:1.7;color:var(--t1);font-size:.92rem;white-space:pre-wrap}
+.not-found{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.3);
+  border-left:4px solid var(--warn);border-radius:0 12px 12px 0;padding:14px 18px;color:var(--warn);margin:12px 0}
+
+/* Sources */
+.source-item{background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.18);
+  border-left:3px solid var(--primary);border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0;font-size:.85rem}
+.source-header{display:flex;justify-content:space-between;align-items:center}
+.source-num{font-weight:700;color:#818cf8}
+.source-score{background:rgba(52,211,153,.12);color:var(--ok);border-radius:10px;padding:2px 10px;font-size:.78rem;font-weight:600}
+.chunk-text{background:rgba(255,255,255,.02);border-left:3px solid #475569;border-radius:0 8px 8px 0;
+  padding:10px 14px;margin-top:8px;font-size:.8rem;line-height:1.5;color:var(--t2);white-space:pre-wrap;display:none}
+
+/* Metrics */
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.metric{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;text-align:center}
+.metric .val{font-size:1.2rem;font-weight:700;color:#818cf8}
+.metric .lbl{font-size:.72rem;color:var(--t3);margin-top:2px}
+
+/* History */
+.chat-q{background:rgba(99,102,241,.08);border-radius:12px 12px 12px 0;padding:12px 16px;margin:6px 0;color:#c7d2fe;font-size:.88rem}
+.chat-a{background:rgba(52,211,153,.05);border-radius:12px 12px 0 12px;padding:12px 16px;margin:6px 0 14px;
+  color:var(--t1);font-size:.88rem;line-height:1.6}
+.chat-meta{font-size:.75rem;color:var(--t3);margin-top:6px}
+
+/* Settings toggle */
+.settings-toggle{position:fixed;top:16px;right:16px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:8px 12px;color:var(--t2);font-size:1.1rem;z-index:100;transition:.2s}
+.settings-toggle:hover{color:var(--t1);border-color:var(--primary)}
+
+/* Settings panel */
+.settings-panel{position:fixed;top:0;right:-340px;width:320px;height:100vh;background:var(--bg2);
+  border-left:1px solid var(--border);padding:20px;overflow-y:auto;transition:.3s;z-index:200}
+.settings-panel.open{right:0}
+.settings-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:150;display:none}
+.settings-overlay.open{display:block}
+.settings-panel h3{font-size:1rem;color:var(--t1);margin-bottom:16px}
+
+/* Spinner */
+.spinner{display:inline-block;width:18px;height:18px;border:2px solid rgba(99,102,241,.3);
+  border-top-color:var(--primary);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-overlay{display:none;align-items:center;justify-content:center;gap:10px;padding:40px;color:var(--t2)}
+.loading-overlay.show{display:flex}
+
+/* Upload success */
+.upload-result{background:rgba(52,211,153,.08);border:1px solid rgba(52,211,153,.3);
+  border-left:4px solid var(--ok);border-radius:0 12px 12px 0;padding:10px 16px;margin:6px 0;color:var(--ok);font-size:.85rem}
+
+/* Indexed file item with delete */
+.indexed-file-item{display:flex;align-items:center;justify-content:space-between;background:rgba(99,102,241,.08);
+  border:1px solid var(--border);border-radius:8px;padding:8px 14px;margin:5px 0;transition:.2s}
+.indexed-file-item:hover{background:rgba(99,102,241,.14)}
+.indexed-file-info{display:flex;align-items:center;gap:8px;font-size:.85rem;color:#a5b4fc}
+.indexed-file-chunks{font-size:.75rem;color:var(--t3);background:rgba(255,255,255,.05);border-radius:10px;padding:2px 8px}
+.btn-delete-file{background:rgba(248,113,113,.1);color:var(--err);border:1px solid rgba(248,113,113,.2);
+  border-radius:6px;padding:4px 10px;font-size:.78rem;cursor:pointer;transition:.2s}
+.btn-delete-file:hover{background:rgba(248,113,113,.25)}
+
+/* Checkbox filter list */
+.filter-list{max-height:180px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;
+  background:rgba(255,255,255,.02)}
+.filter-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;
+  font-size:.85rem;color:var(--t2);transition:.15s}
+.filter-item:hover{background:rgba(99,102,241,.1);color:var(--t1)}
+.filter-item input[type=checkbox]{accent-color:var(--primary);width:16px;height:16px;cursor:pointer}
+.filter-item.checked{color:#a5b4fc;background:rgba(99,102,241,.08)}
+.filter-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.filter-header button{background:none;color:var(--accent);font-size:.78rem;cursor:pointer;border:none;padding:2px 6px}
+
+/* Responsive */
+@media(max-width:600px){
+  .metrics{grid-template-columns:1fr 1fr}
+  .form-row{grid-template-columns:1fr}
+  .app{padding:12px}
+}
+</style>
+</head>
+<body>
+
+<button class="settings-toggle" onclick="toggleSettings()" title="Ayarlar">⚙️</button>
+<div class="settings-overlay" id="settingsOverlay" onclick="toggleSettings()"></div>
+<div class="settings-panel" id="settingsPanel">
+  <h3>⚙️ Sistem Ayarları</h3>
+  <div class="form-group"><label>LLM Modeli</label><input type="text" id="sModel" value="llama3.1:8b"></div>
+  <div class="form-group"><label>Sıcaklık (Temperature)</label><input type="number" id="sTemp" value="0.1" min="0" max="1" step="0.05"></div>
+  <div class="form-group"><label>Top-K Kaynak</label><input type="number" id="sTopK" value="5" min="1" max="10"></div>
+  <div class="form-group"><label>Min. Benzerlik</label><input type="number" id="sMinScore" value="0.0" min="0" max="1" step="0.05"></div>
+  <hr style="border-color:var(--border);margin:16px 0">
+  <div class="form-group"><label>Chunking Stratejisi</label>
+    <select id="sChunkMode"><option>recursive</option><option>sentence</option><option>paragraph</option><option>overlap</option><option>fixed</option></select>
+  </div>
+  <div class="form-row">
+    <div><label>Chunk Boyutu</label><input type="number" id="sChunkSize" value="512" min="128" max="2048" step="64"></div>
+    <div><label>Overlap</label><input type="number" id="sChunkOverlap" value="128" min="0" max="512" step="32"></div>
+  </div>
+  <hr style="border-color:var(--border);margin:16px 0">
+  <button class="btn btn-danger btn-full btn-sm" onclick="resetDB()">🗑️ Veritabanını Sıfırla</button>
+</div>
+
+<div class="app">
+  <div class="hero">
+    <h1>🤖 Kaynak Göstermeli Soru-Cevap</h1>
+    <p>Dokümanlarınızı yükleyin, seçin ve soru sorun — cevaplar kaynak gösterilerek yerel LLM ile üretilir.</p>
+  </div>
+
+  <div class="status-bar" id="statusBar">
+    <div class="status-item"><span class="dot off" id="dotOllama"></span><span id="lblOllama">Ollama</span></div>
+    <div class="status-item"><span class="dot off" id="dotModel"></span><span id="lblModel">Model</span></div>
+    <div class="status-item">📄 <span id="lblChunks">0</span> chunk</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('upload')">📄 Doküman Yükle</button>
+    <button class="tab-btn" onclick="switchTab('qa')">💬 Soru-Cevap</button>
+    <button class="tab-btn" onclick="switchTab('history')">📜 Geçmiş</button>
+  </div>
+
+  <!-- UPLOAD TAB -->
+  <div class="tab-content active" id="tab-upload">
+    <div class="card">
+      <div class="section-title">📄 Doküman Yükleme & İndeksleme</div>
+      <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <div class="icon">📁</div>
+        <p>PDF, DOCX veya TXT sürükleyin veya tıklayın</p>
+      </div>
+      <input type="file" class="file-input" id="fileInput" multiple accept=".pdf,.docx,.txt">
+      <div id="fileList" style="margin-top:10px"></div>
+      <button class="btn btn-primary btn-full" style="margin-top:12px" id="btnIndex" onclick="indexFiles()" disabled>🚀 İndeksle</button>
+      <div id="uploadResults"></div>
+    </div>
+    <div class="card" id="indexedCard" style="display:none">
+      <div class="section-title">✅ İndekslenen Dosyalar</div>
+      <div id="indexedList"></div>
+    </div>
+  </div>
+
+  <!-- QA TAB -->
+  <div class="tab-content" id="tab-qa">
+    <div class="card">
+      <div class="section-title">💬 Soru Sorun</div>
+      <div class="form-group">
+        <label>Kaynak Filtresi (birden fazla seçebilirsiniz)</label>
+        <div class="filter-header">
+          <span id="filterStatus" style="font-size:.78rem;color:var(--t3)">Tüm dokümanlar</span>
+          <div><button onclick="selectAllFilters()">Tümünü Seç</button><button onclick="clearAllFilters()">Temizle</button></div>
+        </div>
+        <div class="filter-list" id="sourceFilterList">
+          <p style="text-align:center;color:var(--t3);padding:12px;font-size:.82rem">Henüz doküman yüklenmedi.</p>
+        </div>
+      </div>
+      <div class="form-group">
+        <textarea id="queryInput" rows="4" placeholder="Dokümanlara dayalı bir soru sorun..."></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" id="btnAsk" onclick="askQuestion()">🚀 Soruyu Gönder</button>
+    </div>
+    <div class="loading-overlay" id="qaLoading"><div class="spinner"></div> Kaynaklar aranıyor ve cevap üretiliyor...</div>
+    <div id="qaResult"></div>
+  </div>
+
+  <!-- HISTORY TAB -->
+  <div class="tab-content" id="tab-history">
+    <div class="card">
+      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>📜 Sohbet Geçmişi</span>
+        <button class="btn btn-danger btn-sm" onclick="clearHistory()">🗑️ Temizle</button>
+      </div>
+      <div id="historyList"><p style="text-align:center;color:var(--t3);padding:30px">Henüz soru sorulmadı.</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let chatHistory = [];
+let indexedFiles = [];
+let filesDetail = [];
+let selectedFiles = [];
+
+// ── Tab switching ──
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b => { if(b.textContent.includes(name==='upload'?'Yükle':name==='qa'?'Soru':'Geçmiş')) b.classList.add('active'); });
+  if(name==='qa') refreshFileFilter();
+}
+
+// ── Settings panel ──
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('open');
+  document.getElementById('settingsOverlay').classList.toggle('open');
+}
+function getSettings() {
+  return {
+    model: document.getElementById('sModel').value,
+    temperature: parseFloat(document.getElementById('sTemp').value),
+    top_k: parseInt(document.getElementById('sTopK').value),
+    min_score: parseFloat(document.getElementById('sMinScore').value),
+    chunk_mode: document.getElementById('sChunkMode').value,
+    chunk_size: parseInt(document.getElementById('sChunkSize').value),
+    chunk_overlap: parseInt(document.getElementById('sChunkOverlap').value),
+  };
+}
+
+// ── Health check ──
+async function checkHealth() {
+  try {
+    const r = await fetch(API + '/api/health');
+    const d = await r.json();
+    document.getElementById('dotOllama').className = 'dot ' + (d.ollama_server ? 'on' : 'off');
+    document.getElementById('dotModel').className = 'dot ' + (d.ollama_model ? 'on' : 'off');
+    document.getElementById('lblModel').textContent = d.model_name || 'Model';
+    document.getElementById('lblChunks').textContent = d.vectorstore_chunks >= 0 ? d.vectorstore_chunks : '?';
+  } catch(e) {
+    console.error('Health check failed:', e);
+  }
+}
+
+// ── File upload ──
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('drag');
+  selectedFiles = Array.from(e.dataTransfer.files);
+  showSelectedFiles();
+});
+fileInput.addEventListener('change', () => {
+  selectedFiles = Array.from(fileInput.files);
+  showSelectedFiles();
+});
+
+function showSelectedFiles() {
+  const el = document.getElementById('fileList');
+  el.innerHTML = selectedFiles.map(f => `<span class="file-chip">📎 ${f.name} (${(f.size/1024).toFixed(1)} KB)</span>`).join('');
+  document.getElementById('btnIndex').disabled = selectedFiles.length === 0;
+}
+
+async function indexFiles() {
+  if (!selectedFiles.length) return;
+  const btn = document.getElementById('btnIndex');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> İndeksleniyor...';
+
+  const s = getSettings();
+  const fd = new FormData();
+  selectedFiles.forEach(f => fd.append('files', f));
+  fd.append('chunk_mode', s.chunk_mode);
+  fd.append('chunk_size', s.chunk_size);
+  fd.append('chunk_overlap', s.chunk_overlap);
+
+  try {
+    const r = await fetch(API + '/api/upload', { method: 'POST', body: fd });
+    const d = await r.json();
+    indexedFiles = d.indexed_files || [];
+    const el = document.getElementById('uploadResults');
+    el.innerHTML = d.results.map(s => s.error
+      ? `<div class="not-found">❌ ${s.display_name}: ${s.error}</div>`
+      : `<div class="upload-result">✅ <b>${s.display_name}</b> → ${s.chunks} chunk | ${s.stored} kayıt | ${s.elapsed_sec}s</div>`
+    ).join('');
+    await loadFilesFromDB();
+    checkHealth();
+  } catch(e) {
+    document.getElementById('uploadResults').innerHTML = `<div class="not-found">❌ Hata: ${e.message}</div>`;
+  }
+  btn.disabled = false; btn.textContent = '🚀 İndeksle';
+  selectedFiles = []; fileInput.value = '';
+  document.getElementById('fileList').innerHTML = '';
+}
+
+function renderIndexedFiles() {
+  const card = document.getElementById('indexedCard');
+  const list = document.getElementById('indexedList');
+  if (!indexedFiles.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  list.innerHTML = filesDetail.map(f => `<div class="indexed-file-item">
+    <div class="indexed-file-info">📄 ${escHtml(f.name)} <span class="indexed-file-chunks">${f.chunks} chunk</span></div>
+    <button class="btn-delete-file" onclick="deleteFile('${escHtml(f.name)}')">🗑️ Sil</button>
+  </div>`).join('');
+}
+
+async function deleteFile(fileName) {
+  if (!confirm(`"${fileName}" dokümanı silinecek. Emin misiniz?`)) return;
+  try {
+    const r = await fetch(API + '/api/files/delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ file_name: fileName })
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Hata'); }
+    const d = await r.json();
+    await loadFilesFromDB();
+    checkHealth();
+    document.getElementById('uploadResults').innerHTML = `<div class="upload-result">🗑️ ${d.message}</div>`;
+  } catch(e) { alert('Silme hatası: ' + e.message); }
+}
+
+async function loadFilesFromDB() {
+  try {
+    const r = await fetch(API + '/api/files');
+    const d = await r.json();
+    indexedFiles = d.files || [];
+    filesDetail = d.files_detail || indexedFiles.map(f => ({name: f, chunks: '?'}));
+    renderIndexedFiles();
+    refreshFileFilter();
+  } catch(e) { console.error('loadFilesFromDB:', e); }
+}
+
+function refreshFileFilter() {
+  const el = document.getElementById('sourceFilterList');
+  if (!indexedFiles.length) {
+    el.innerHTML = '<p style="text-align:center;color:var(--t3);padding:12px;font-size:.82rem">Henüz doküman yüklenmedi.</p>';
+    updateFilterStatus();
+    return;
+  }
+  el.innerHTML = indexedFiles.map(f => {
+    const fd = filesDetail.find(d => d.name === f);
+    const chunks = fd ? fd.chunks : '?';
+    return `<label class="filter-item" onclick="setTimeout(updateFilterStatus,10)">
+      <input type="checkbox" value="${escHtml(f)}" checked> 📄 ${escHtml(f)} <span class="indexed-file-chunks">${chunks} chunk</span>
+    </label>`;
+  }).join('');
+  updateFilterStatus();
+}
+
+function getSelectedSources() {
+  const boxes = document.querySelectorAll('#sourceFilterList input[type=checkbox]');
+  const checked = Array.from(boxes).filter(c => c.checked).map(c => c.value);
+  if (checked.length === 0 || checked.length === indexedFiles.length) return null;
+  return checked;
+}
+
+function updateFilterStatus() {
+  const sources = getSelectedSources();
+  const el = document.getElementById('filterStatus');
+  if (!sources) el.textContent = '🌐 Tüm dokümanlar';
+  else el.textContent = `📄 ${sources.length}/${indexedFiles.length} doküman seçili`;
+}
+
+function selectAllFilters() {
+  document.querySelectorAll('#sourceFilterList input[type=checkbox]').forEach(c => c.checked = true);
+  updateFilterStatus();
+}
+function clearAllFilters() {
+  document.querySelectorAll('#sourceFilterList input[type=checkbox]').forEach(c => c.checked = false);
+  updateFilterStatus();
+}
+
+// ── Ask question ──
+async function askQuestion() {
+  const q = document.getElementById('queryInput').value.trim();
+  if (!q) return;
+  const btn = document.getElementById('btnAsk');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Üretiliyor...';
+  document.getElementById('qaLoading').classList.add('show');
+  document.getElementById('qaResult').innerHTML = '';
+
+  const s = getSettings();
+  const sf = getSelectedSources();
+
+  try {
+    const r = await fetch(API + '/api/ask', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ query: q, top_k: s.top_k, min_score: s.min_score, source_filter: sf, temperature: s.temperature, model: s.model })
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Bilinmeyen hata'); }
+    const d = await r.json();
+    chatHistory.unshift(d);
+    renderQAResult(d);
+    renderHistory();
+  } catch(e) {
+    document.getElementById('qaResult').innerHTML = `<div class="not-found">❌ ${e.message}</div>`;
+  }
+  document.getElementById('qaLoading').classList.remove('show');
+  btn.disabled = false; btn.textContent = '🚀 Soruyu Gönder';
+}
+
+function renderQAResult(d) {
+  let html = `<div class="metrics">
+    <div class="metric"><div class="val">⏱️ ${d.duration_sec}s</div><div class="lbl">Süre</div></div>
+    <div class="metric"><div class="val">📄 ${d.sources.length}</div><div class="lbl">Kaynak</div></div>
+    <div class="metric"><div class="val">${d.prompt_tokens}</div><div class="lbl">Prompt Token</div></div>
+    <div class="metric"><div class="val">${d.response_tokens}</div><div class="lbl">Cevap Token</div></div>
+  </div>`;
+
+  if (!d.has_answer) html += `<div class="not-found">⚠️ Bu sorunun cevabı verilen dokümanlarda bulunamamıştır.</div>`;
+  html += `<div class="answer-card">${escHtml(d.answer)}</div>`;
+
+  if (d.sources && d.sources.length) {
+    html += `<div class="section-title" style="margin-top:18px">📚 Kullanılan Kaynaklar (${d.sources.length})</div>`;
+    d.sources.forEach((s, i) => {
+      const rd = d.retrieval_details && d.retrieval_details[i];
+      const pct = (s.skor * 100).toFixed(1);
+      html += `<div class="source-item">
+        <div class="source-header">
+          <span><span class="source-num">[Kaynak ${s.kaynak_no}]</span> 📄 ${escHtml(s.dosya)} · Sayfa: ${s.sayfa} · Chunk #${s.chunk_idx}</span>
+          <span class="source-score">${pct}%</span>
+        </div>
+        ${rd ? `<div class="chunk-text" id="chunk${i}">${escHtml(rd.text.substring(0, 800))}${rd.text.length > 800 ? '...' : ''}</div>
+        <button class="btn btn-sm" style="margin-top:6px;color:var(--t3)" onclick="toggleChunk(${i})">📖 Metni Göster/Gizle</button>` : ''}
+      </div>`;
+    });
+  }
+  document.getElementById('qaResult').innerHTML = html;
+}
+
+function toggleChunk(i) {
+  const el = document.getElementById('chunk' + i);
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function escHtml(s) {
+  const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML;
+}
+
+// ── History ──
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!chatHistory.length) { el.innerHTML = '<p style="text-align:center;color:var(--t3);padding:30px">Henüz soru sorulmadı.</p>'; return; }
+  el.innerHTML = chatHistory.map((e, i) => {
+    const idx = chatHistory.length - i;
+    const preview = e.answer.length > 400 ? e.answer.substring(0, 400) + '...' : e.answer;
+    return `<div class="chat-q"><strong>🙋 Soru ${idx}:</strong> ${escHtml(e.query)}</div>
+    <div class="chat-a"><strong>🤖 Cevap:</strong><br>${escHtml(preview)}
+      <div class="chat-meta">⏱️ ${e.duration_sec}s · 📄 ${e.sources.length} kaynak · 🧠 ${e.llm_model}</div>
+    </div>`;
+  }).join('');
+}
+
+function clearHistory() { chatHistory = []; renderHistory(); }
+
+// ── Reset DB ──
+async function resetDB() {
+  if (!confirm('Veritabanı sıfırlanacak. Emin misiniz?')) return;
+  try {
+    await fetch(API + '/api/reset', { method: 'POST' });
+    indexedFiles = []; filesDetail = [];
+    renderIndexedFiles(); refreshFileFilter(); checkHealth();
+    alert('✅ Veritabanı sıfırlandı.');
+  } catch(e) { alert('Hata: ' + e.message); }
+}
+
+// ── Init ──
+async function init() {
+  checkHealth();
+  setInterval(checkHealth, 30000);
+  await loadFilesFromDB();
+}
+init();
+</script>
+</body>
+</html>

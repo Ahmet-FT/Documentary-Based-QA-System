@@ -1,14 +1,19 @@
 [project]
-name = "app"
-version = "0.1.0"
-description = "Add your description here"
+name = "source-citation-qa"
+version = "1.0.0"
+description = "Türkçe ve çok dilli dokümanlar için kaynak göstermeli soru-cevap sistemi"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "chromadb>=1.5.9",
+    "fastapi>=0.115.0",
     "llama-index>=0.14.23",
+    "llama-index-embeddings-huggingface>=0.4.0",
     "pymupdf>=1.28.0",
     "python-docx>=1.2.0",
     "python-dotenv>=1.2.2",
-    "streamlit>=1.60.0",
+    "sentence-transformers>=3.0.0",
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "uvicorn>=0.34.0",
 ]

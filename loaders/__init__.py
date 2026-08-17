@@ -1,29 +1,38 @@
-import os
-from typing import List
-from llama_index.core import Document
+"""
+app/loaders/__init__.py
+=======================
+Önerilen kullanım:
+    from app.loaders import DocumentLoader
+
+    loader = DocumentLoader()
+    docs   = loader.load("rapor.pdf")
+
+Geriye dönük uyumluluk için load_document() fonksiyonu da mevcuttur.
+"""
+
+from app.loaders.document_loader import DocumentLoader
+from app.loaders.text_cleaner import full_clean
+
+# Geriye dönük uyumluluk — eski testler ve kod hâlâ çalışır
 from app.loaders.pdf_loader import PDFLoader
 from app.loaders.docx_loader import DocxLoader
 from app.loaders.txt_loader import TxtLoader
+import os
 
-def load_document(file_path: str) -> List[Document]:
+
+def load_document(file_path: str):
     """
-    Dosya uzantısına göre doğru yükleyiciyi otomatik seçer ve metin çıkarımını yapar.
-    
-    Args:
-        file_path (str): Okunacak dosya yolu.
-        
-    Returns:
-        List[Document]: LlamaIndex Document nesneleri listesi.
+    Geriye dönük uyumluluk fonksiyonu.
+    Yeni kodlarda DocumentLoader().load() kullanılmalıdır.
     """
-    ext = os.path.splitext(file_path)[1].lower()
-    
-    if ext == ".pdf":
-        loader = PDFLoader()
-    elif ext == ".docx":
-        loader = DocxLoader()
-    elif ext in [".txt", ".md"]:
-        loader = TxtLoader()
-    else:
-        raise ValueError(f"Desteklenmeyen dosya formatı: {ext}")
-        
-    return loader.load(file_path)
+    return DocumentLoader().load(file_path)
+
+
+__all__ = [
+    "DocumentLoader",
+    "full_clean",
+    "load_document",
+    "PDFLoader",
+    "DocxLoader",
+    "TxtLoader",
+]
