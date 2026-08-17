@@ -40,16 +40,17 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 from llama_index.core import Document
 
+from app.config import settings as app_settings
 from app.embeddings import EmbeddingManager
 
 
 # ---------------------------------------------------------------------------
-# Sabitler
+# Sabitler (.env'den yüklenir)
 # ---------------------------------------------------------------------------
 
-DEFAULT_COLLECTION = "source_citation_qa"
-DEFAULT_PERSIST_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "chroma_db"
+DEFAULT_COLLECTION = app_settings.CHROMA_COLLECTION
+DEFAULT_PERSIST_DIR = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..", app_settings.CHROMA_PERSIST_DIR)
 )
 
 
@@ -182,7 +183,7 @@ class VectorStore:
         self,
         query_text: str,
         n: int = 5,
-        source_filter: Optional[str] = None,
+        source_filter: Optional[str | List[str]] = None,
     ) -> List[QueryResult]:
         """
         Doğal dil sorusunu vektöre dönüştürüp en yakın chunk'ları getirir.
@@ -190,14 +191,22 @@ class VectorStore:
         Args:
             query_text    : Kullanıcı sorusu.
             n             : Döndürülecek sonuç sayısı.
-            source_filter : Belirli bir dosyaya göre filtrele (file_name).
+            source_filter : Belirli dosya(lar)a göre filtrele.
+                            str  → tek dosya,
+                            list → birden fazla dosya ($in operatörü).
 
         Returns:
             QueryResult listesi, benzerlik skoruna göre azalan sırada.
         """
         query_vec = self.embed_manager.embed_query(query_text)
 
-        where = {"file_name": source_filter} if source_filter else None
+        # Çoklu veya tekli dosya filtresi
+        if isinstance(source_filter, list) and source_filter:
+            where = {"file_name": {"$in": source_filter}}
+        elif isinstance(source_filter, str) and source_filter:
+            where = {"file_name": source_filter}
+        else:
+            where = None
 
         raw = self._collection.query(
             query_embeddings=[query_vec],
@@ -236,6 +245,60 @@ class VectorStore:
         """Tüm koleksiyonu temizler (sıfırlar)."""
         self._client.delete_collection(self.collection_name)
         self._collection = self._init_collection(reset=False)
+
+    def get_indexed_files(self) -> List[str]:
+        """
+        ChromaDB'deki benzersiz dosya isimlerini döndürür.
+
+        Returns:
+            Alfabetik sıralı dosya ismi listesi.
+        """
+        total = self._collection.count()
+        if total == 0:
+            return []
+
+        all_meta = self._collection.get(include=["metadatas"])
+        files: set[str] = set()
+        for meta in all_meta["metadatas"]:
+            fname = meta.get("file_name")
+            if fname:
+                files.add(fname)
+        return sorted(files)
+
+    def delete_by_source(self, file_name: str) -> int:
+        """
+        Belirli bir dosyaya ait tüm chunk'ları siler.
+
+        Args:
+            file_name : Silinecek dosyanın adı (metadata file_name).
+
+        Returns:
+            Silinen chunk sayısı.
+        """
+        results = self._collection.get(
+            where={"file_name": file_name},
+            include=[],
+        )
+        ids = results["ids"]
+        if ids:
+            self._collection.delete(ids=ids)
+        return len(ids)
+
+    def get_file_chunk_count(self, file_name: str) -> int:
+        """
+        Belirli bir dosyanın chunk sayısını döndürür.
+
+        Args:
+            file_name : Dosya adı.
+
+        Returns:
+            Dosyaya ait chunk sayısı.
+        """
+        results = self._collection.get(
+            where={"file_name": file_name},
+            include=[],
+        )
+        return len(results["ids"])
 
     def stats(self) -> Dict[str, Any]:
         """Koleksiyon istatistikleri."""

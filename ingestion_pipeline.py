@@ -14,6 +14,7 @@ Kullanım:
 
 from __future__ import annotations
 
+import os
 import time
 from typing import Any, Dict, List, Optional
 
@@ -78,24 +79,39 @@ class IngestionPipeline:
     # Public API
     # ------------------------------------------------------------------
 
-    def ingest(self, file_path: str, show_progress: bool = True) -> Dict[str, Any]:
+    def ingest(self, file_path: str, show_progress: bool = True,
+               original_name: str | None = None) -> Dict[str, Any]:
         """
         Tek bir dosyayı pipeline'dan geçirir.
+
+        Args:
+            file_path      : Dosya yolu.
+            show_progress  : İlerleme mesajı yazdır.
+            original_name  : Orijinal dosya adı (temp dosya yerine gösterilir).
 
         Returns:
             İstatistik sözlüğü: file, pages, chunks, elapsed_sec
         """
         t0 = time.perf_counter()
 
+        display_name = original_name or os.path.basename(file_path)
+
         if show_progress:
             print(f"\n{'='*55}")
-            print(f"  Ingestion: {file_path}")
+            print(f"  Ingestion: {display_name}")
             print(f"{'='*55}")
 
         # 1. Yükle
         if show_progress:
             print("  [1/3] Doküman yükleniyor...")
         docs = self.loader.load(file_path)
+
+        # Orijinal dosya adını metadata'ya yaz (temp dosya adını değiştir)
+        if original_name:
+            for doc in docs:
+                doc.metadata["file_name"] = original_name
+                doc.metadata["source"] = original_name
+
         if show_progress:
             print(f"        {len(docs)} sayfa/bölüm yüklendi")
 
@@ -114,7 +130,7 @@ class IngestionPipeline:
         elapsed = round(time.perf_counter() - t0, 2)
 
         stats = {
-            "file":        file_path,
+            "file":        display_name,
             "pages":       len(docs),
             "chunks":      len(chunks),
             "stored":      added,
@@ -122,7 +138,7 @@ class IngestionPipeline:
         }
 
         if show_progress:
-            print(f"\n  ✅ Tamamlandı — {len(chunks)} chunk, {elapsed}s")
+            print(f"\n  Tamamlandi -- {len(chunks)} chunk, {elapsed}s")
 
         return stats
 

@@ -28,16 +28,18 @@ from typing import List
 from llama_index.core import Settings
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 
+from app.config import settings as app_settings
+
 
 # ---------------------------------------------------------------------------
-# Sabitler
+# Sabitler (.env'den yüklenir)
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL   = "intfloat/multilingual-e5-large"
+DEFAULT_MODEL   = app_settings.EMBEDDING_MODEL
 QUERY_PREFIX    = "query: "
 PASSAGE_PREFIX  = "passage: "
 EMBED_DIM       = 1024      # multilingual-e5-large çıktı boyutu
-DEFAULT_BATCH   = 32        # GPU varsa 64'e çıkarılabilir
+DEFAULT_BATCH   = app_settings.EMBEDDING_BATCH_SIZE
 
 
 # ---------------------------------------------------------------------------

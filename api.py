@@ -16,7 +16,7 @@ import os
 import sys
 import tempfile
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -34,6 +34,15 @@ from app.llm import LLMManager
 from app.qa_engine import QAEngine
 from app.embeddings import EmbeddingManager
 from app.vectorstore import VectorStore
+from app.config import settings
+
+
+# ── Sabitler (.env'den yüklenir) ─────────────────────────────────
+
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+MAX_FILE_SIZE_MB = settings.MAX_FILE_SIZE_MB
+MAX_TEXT_LENGTH = settings.MAX_TEXT_LENGTH
+MAX_QUERY_LENGTH = settings.MAX_QUERY_LENGTH
 
 
 # ── Pydantic modelleri ───────────────────────────────────────────
@@ -42,9 +51,9 @@ class AskRequest(BaseModel):
     query: str
     top_k: int = 5
     min_score: float = 0.0
-    source_filter: Optional[str] = None
-    temperature: float = 0.1
-    model: str = "llama3.1:8b"
+    source_filter: Optional[Union[str, List[str]]] = None
+    temperature: float = settings.OLLAMA_TEMPERATURE
+    model: str = settings.OLLAMA_MODEL
 
 
 class TextIndexRequest(BaseModel):
@@ -141,7 +150,31 @@ async def upload_files(
 
     results = []
     for uf in files:
+        # ── Dosya türü kontrolü ──
+        ext = os.path.splitext(uf.filename or "")[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            results.append({
+                "display_name": uf.filename,
+                "error": f"Desteklenmeyen dosya turu: '{ext}'. "
+                         f"Desteklenen: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+            })
+            continue
+
         content = await uf.read()
+
+        # ── Boş dosya kontrolü ──
+        if not content or len(content) == 0:
+            results.append({"display_name": uf.filename, "error": "Dosya bos."})
+            continue
+
+        # ── Dosya boyutu kontrolü ──
+        if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
+            results.append({
+                "display_name": uf.filename,
+                "error": f"Dosya cok buyuk (maks {MAX_FILE_SIZE_MB} MB).",
+            })
+            continue
+
         suffix = "." + uf.filename.rsplit(".", 1)[-1] if "." in uf.filename else ".txt"
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
@@ -149,7 +182,8 @@ async def upload_files(
             tmp_path = tmp.name
 
         try:
-            stats = pipeline.ingest(tmp_path, show_progress=False)
+            stats = pipeline.ingest(tmp_path, show_progress=False,
+                                    original_name=uf.filename)
             stats["display_name"] = uf.filename
             results.append(stats)
             if uf.filename not in _indexed_files:
@@ -167,6 +201,18 @@ async def upload_files(
 @app.post("/api/upload-text")
 async def upload_text(req: TextIndexRequest):
     """Yapıştırılan metni dosya olarak indeksler."""
+    # ── Boş metin kontrolü ──
+    if not req.text or not req.text.strip():
+        raise HTTPException(status_code=400, detail="Metin bos olamaz.")
+
+    # ── Çok uzun metin kontrolü ──
+    if len(req.text) > MAX_TEXT_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Metin cok uzun ({len(req.text):,} karakter). "
+                   f"Maksimum: {MAX_TEXT_LENGTH:,} karakter.",
+        )
+
     pipeline, _, _ = _get_system()
 
     pipeline.chunker.mode = type(pipeline.chunker.mode)(req.chunk_mode)
@@ -180,7 +226,8 @@ async def upload_text(req: TextIndexRequest):
         tmp_path = tmp.name
 
     try:
-        stats = pipeline.ingest(tmp_path, show_progress=False)
+        stats = pipeline.ingest(tmp_path, show_progress=False,
+                                original_name=req.doc_name)
         stats["display_name"] = req.doc_name
         if req.doc_name not in _indexed_files:
             _indexed_files.append(req.doc_name)
@@ -196,7 +243,28 @@ async def upload_text(req: TextIndexRequest):
 @app.post("/api/ask")
 async def ask_question(req: AskRequest):
     """Kullanıcı sorusunu cevaplar — kaynak göstermeli."""
+    # ── Boş soru kontrolü ──
+    if not req.query or not req.query.strip():
+        raise HTTPException(status_code=400, detail="Soru bos olamaz.")
+
+    # ── Çok uzun soru kontrolü ──
+    if len(req.query) > MAX_QUERY_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Soru cok uzun ({len(req.query)} karakter). "
+                   f"Maksimum: {MAX_QUERY_LENGTH} karakter.",
+        )
+
     _, _, qa = _get_system()
+
+    # ── Doküman yüklenmemiş kontrolü ──
+    chunk_count = qa.health_check().get("vectorstore_chunks", 0)
+    if chunk_count <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Henuz dokuman yuklenmedi. Once 'Dokuman Yukle' "
+                   "sekmesinden dokuman yukleyin.",
+        )
 
     qa.llm.model = req.model
     qa.llm.temperature = req.temperature
@@ -248,8 +316,49 @@ async def ask_question(req: AskRequest):
 
 @app.get("/api/files")
 async def list_files():
-    """İndekslenen dosyaların listesini döndürür."""
-    return {"files": _indexed_files}
+    """İndekslenen dosyaların listesini ChromaDB'den döndürür."""
+    pipeline, _, _ = _get_system()
+    db_files = pipeline.vector_store.get_indexed_files()
+    # Dosya başına chunk sayısı bilgisi ekle
+    files_detail = []
+    for f in db_files:
+        chunk_count = pipeline.vector_store.get_file_chunk_count(f)
+        files_detail.append({"name": f, "chunks": chunk_count})
+    return {"files": db_files, "files_detail": files_detail}
+
+
+# ── API: Tek doküman silme ───────────────────────────────────────
+
+@app.post("/api/files/delete")
+async def delete_file(payload: dict):
+    """
+    Belirli bir dokümanın tüm chunk'larını ChromaDB'den siler.
+
+    Body: {"file_name": "rapor.pdf"}
+    """
+    file_name = payload.get("file_name", "").strip()
+    if not file_name:
+        raise HTTPException(status_code=400, detail="Dosya adı boş olamaz.")
+
+    pipeline, _, _ = _get_system()
+    deleted = pipeline.vector_store.delete_by_source(file_name)
+
+    if deleted == 0:
+        raise HTTPException(
+            status_code=404,
+            detail=f"'{file_name}' adlı doküman bulunamadı.",
+        )
+
+    # Bellek listesinden de kaldır
+    if file_name in _indexed_files:
+        _indexed_files.remove(file_name)
+
+    return {
+        "status": "ok",
+        "file": file_name,
+        "deleted_chunks": deleted,
+        "message": f"'{file_name}' silindi ({deleted} chunk).",
+    }
 
 
 # ── API: Veritabanı sıfırlama ───────────────────────────────────
@@ -275,12 +384,13 @@ async def reset_database():
 @app.get("/api/stats")
 async def stats():
     """Sistem istatistikleri."""
-    _, _, qa = _get_system()
+    pipeline, _, qa = _get_system()
     h = qa.health_check()
+    db_files = pipeline.vector_store.get_indexed_files()
     return {
         "vectorstore_chunks": h["vectorstore_chunks"],
-        "indexed_files_count": len(_indexed_files),
-        "files": _indexed_files,
+        "indexed_files_count": len(db_files),
+        "files": db_files,
         "ollama_server": h["ollama_server"],
         "ollama_model": h["ollama_model"],
         "model_name": h["model_name"],

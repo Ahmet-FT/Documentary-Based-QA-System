@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import textwrap
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from app.embeddings import EmbeddingManager
 from app.vectorstore import VectorStore
@@ -69,7 +69,10 @@ class RetrievalResult:
 
     def __post_init__(self):
         self.source      = self.metadata.get("file_name", "bilinmiyor")
-        self.page        = self.metadata.get("page_label", self.metadata.get("page", "?"))
+        self.page        = self.metadata.get(
+            "page_number",
+            self.metadata.get("page_label", self.metadata.get("page", "?"))
+        )
         self.chunk_index = int(self.metadata.get("chunk_index", -1))
 
     # ------------------------------------------------------------------
@@ -147,7 +150,7 @@ class Retriever:
         query:         str,
         top_k:         Optional[int]  = None,
         min_score:     Optional[float] = None,
-        source_filter: Optional[str]  = None,
+        source_filter: Optional[Union[str, List[str]]]  = None,
     ) -> List[RetrievalResult]:
         """
         Sorguya en yakın top-k chunk'ı getirir.
@@ -156,7 +159,7 @@ class Retriever:
             query         : Kullanıcı sorusu veya arama metni.
             top_k         : Kaç sonuç isteniyor (None → default_top_k).
             min_score     : Benzerlik eşiği (None → self.min_score).
-            source_filter : Yalnızca bu dosya adından sonuç getir.
+            source_filter : Dosya adı (str) veya dosya adları listesi (list).
 
         Returns:
             RetrievalResult listesi, benzerlik skoruna göre azalan sırada.
@@ -189,7 +192,7 @@ class Retriever:
         query:         str,
         top_k:         Optional[int]  = None,
         min_score:     Optional[float] = None,
-        source_filter: Optional[str]  = None,
+        source_filter: Optional[Union[str, List[str]]]  = None,
         print_output:  bool = True,
     ) -> List[RetrievalResult]:
         """

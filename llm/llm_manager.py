@@ -29,19 +29,21 @@ from typing import Any, Dict, Optional
 import urllib.request
 import urllib.error
 
+from app.config import settings
+
 
 # ---------------------------------------------------------------------------
-# Sabitler
+# Sabitler (.env'den yüklenir)
 # ---------------------------------------------------------------------------
 
-DEFAULT_MODEL       = "llama3.1:8b"
-DEFAULT_BASE_URL    = "http://localhost:11434"
-DEFAULT_TIMEOUT     = 120          # saniye
-DEFAULT_TEMPERATURE = 0.1          # Düşük = daha deterministik (RAG için ideal)
-DEFAULT_NUM_CTX     = 4096         # Context window boyutu
-DEFAULT_TOP_P       = 0.9
-DEFAULT_NUM_GPU     = -1           # -1 = tüm katmanları GPU'ya yükle
-DEFAULT_REPEAT_PENALTY = 1.1       # Tekrar cezası
+DEFAULT_MODEL          = settings.OLLAMA_MODEL
+DEFAULT_BASE_URL       = settings.OLLAMA_BASE_URL
+DEFAULT_TIMEOUT        = settings.OLLAMA_TIMEOUT
+DEFAULT_TEMPERATURE    = settings.OLLAMA_TEMPERATURE
+DEFAULT_NUM_CTX        = settings.OLLAMA_NUM_CTX
+DEFAULT_TOP_P          = settings.OLLAMA_TOP_P
+DEFAULT_NUM_GPU        = settings.OLLAMA_NUM_GPU
+DEFAULT_REPEAT_PENALTY = settings.OLLAMA_REPEAT_PENALTY
 
 
 # ---------------------------------------------------------------------------

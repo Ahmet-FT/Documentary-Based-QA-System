@@ -1,7 +1,7 @@
 # Source Citation QA System
 
 Türkçe ve çok dilli dökümanlar için **semantik arama** ve **kaynak göstermeli soru-cevap** sistemi.  
-LlamaIndex · ChromaDB · HuggingFace Embeddings · Streamlit üzerine inşa edilmiştir.
+LlamaIndex · ChromaDB · HuggingFace Embeddings · FastAPI · Ollama üzerine inşa edilmiştir.
 
 ---
 
@@ -12,10 +12,11 @@ LlamaIndex · ChromaDB · HuggingFace Embeddings · Streamlit üzerine inşa edi
 - [Proje Yapısı](#proje-yapısı)
 - [Kurulum](#kurulum)
 - [Hızlı Başlangıç](#hızlı-başlangıç)
+- [API Endpoint'leri](#api-endpointleri)
 - [Modüller](#modüller)
-- [Streamlit Arayüzü](#streamlit-arayüzü)
 - [Desteklenen Dosya Formatları](#desteklenen-dosya-formatları)
 - [Chunking Stratejileri](#chunking-stratejileri)
+- [Yapılandırma (.env)](#yapılandırma-env)
 - [Bağımlılıklar](#bağımlılıklar)
 
 ---
@@ -27,10 +28,10 @@ Bu sistem bir dokümanı alıp şu adımlardan geçirir:
 ```
 Doküman → Yükle → Temizle → Chunk → Embedding → ChromaDB
                                                       ↓
-                                  Sorgu → Retriever → Top-K Sonuç
+                                  Sorgu → Retriever → LLM → Cevap + Kaynaklar
 ```
 
-Kullanıcı herhangi bir dokümanı sisteme yükler; sistem metni parçalara ayırır, her parça için 1024 boyutlu anlam vektörü üretir ve ChromaDB'ye kaydeder. Sorgu anında kullanıcının sorusu da vektöre dönüştürülür ve en yakın parçalar benzerlik skoru ile birlikte döndürülür.
+Kullanıcı herhangi bir dokümanı sisteme yükler; sistem metni parçalara ayırır, her parça için 1024 boyutlu anlam vektörü üretir ve ChromaDB'ye kaydeder. Sorgu anında kullanıcının sorusu da vektöre dönüştürülür, en yakın parçalar bulunur ve Ollama üzerinden çalışan bir LLM kaynak göstererek cevap üretir.
 
 ---
 
@@ -44,10 +45,13 @@ Kullanıcı herhangi bir dokümanı sisteme yükler; sistem metni parçalara ay�
 │                                  ↓                  │
 │                            VectorStore (ChromaDB)   │
 │                                  ↓                  │
-│                            Retriever                │
+│                            Retriever → LLMManager   │
+│                                  ↓                  │
+│                             QAEngine                │
 └─────────────────────────────────────────────────────┘
-         ↑                                   ↑
-   Pages/indexing_test.py (Streamlit UI)    API / Script
+                        ↑
+              FastAPI REST API (api.py)
+              Statik HTML Arayüzü (static/index.html)
 ```
 
 | Katman | Teknoloji | Görev |
@@ -58,7 +62,8 @@ Kullanıcı herhangi bir dokümanı sisteme yükler; sistem metni parçalara ay�
 | Embedding | `multilingual-e5-large` | 1024-boyutlu çok dilli vektör |
 | Vektör DB | ChromaDB (persist) | Cosine benzerlik araması |
 | Retrieval | `Retriever` modülü | Top-K, skor filtresi, metadata |
-| Arayüz | Streamlit | Web tabanlı test ve demo |
+| LLM | Ollama (llama3.1:8b) | Kaynak göstermeli cevap üretimi |
+| API | FastAPI + Uvicorn | REST API, statik dosya sunumu |
 
 ---
 
@@ -68,6 +73,8 @@ Kullanıcı herhangi bir dokümanı sisteme yükler; sistem metni parçalara ay�
 Source_citation_QA_System/
 │
 ├── app/                        # Ana Python paketi
+│   ├── api.py                  # FastAPI uygulama ve tüm endpoint'ler
+│   ├── config.py               # .env tabanlı merkezi yapılandırma
 │   ├── ingestion_pipeline.py   # Uçtan uca pipeline (Yükle→Chunk→Embed→Kaydet)
 │   │
 │   ├── loaders/                # Doküman yükleyiciler
@@ -89,19 +96,22 @@ Source_citation_QA_System/
 │   ├── vectorstore/            # Vektör veritabanı
 │   │   └── vector_store.py     # ChromaDB wrapper (upsert, query, stats)
 │   │
-│   └── retriever/              # Retrieval katmanı
-│       └── retriever.py        # Top-K arama, skor filtresi, raporlama
-│
-├── Pages/                      # Streamlit sayfaları
-│   └── indexing_test.py        # Doküman yükle & sorgu test arayüzü
+│   ├── retriever/              # Retrieval katmanı
+│   │   └── retriever.py        # Top-K arama, skor filtresi, raporlama
+│   │
+│   ├── llm/                    # LLM yönetimi
+│   │   ├── llm_manager.py      # Ollama HTTP istemcisi
+│   │   └── prompt_templates.py # Sistem ve kullanıcı prompt şablonları
+│   │
+│   ├── qa_engine/              # Soru-cevap motoru
+│   │   └── qa_engine.py        # Retriever + LLM orchestration
+│   │
+│   └── static/
+│       └── index.html          # Web arayüzü (tarayıcıdan doğrudan erişilir)
 │
 ├── chroma_db/                  # ChromaDB kalıcı depolama (otomatik oluşur)
-├── Documents/                  # Örnek dokümanlar
-│
-├── inspect_chunks.py           # Chunk inceleme aracı
-├── test_chunking.py            # Chunking testleri
-├── test_embedding.py           # Embedding testleri
-├── test_vectorstore.py         # VectorStore testleri
+├── .env                        # Yerel yapılandırma (git'e eklenmez)
+├── .env.example                # Yapılandırma şablonu
 └── README.md
 ```
 
@@ -113,6 +123,7 @@ Source_citation_QA_System/
 
 - Python ≥ 3.12
 - [uv](https://github.com/astral-sh/uv) (önerilen) veya pip
+- [Ollama](https://ollama.com) — LLM için
 
 ### 1. Sanal ortam oluştur ve bağımlılıkları yükle
 
@@ -127,98 +138,93 @@ python -m venv .venv
 pip install -e .
 ```
 
-### 2. Bağımlılık listesi (`pyproject.toml`)
+### 2. .env dosyasını yapılandır
 
-```
-chromadb >= 1.5.9
-llama-index >= 0.14.23
-llama-index-embeddings-huggingface >= 0.4.0
-pymupdf >= 1.28.0
-python-docx >= 1.2.0
-streamlit >= 1.60.0
-torch >= 2.0.0
-transformers >= 4.40.0
-sentence-transformers >= 3.0.0
+```powershell
+copy .env.example .env
+# .env dosyasını düzenle (Ollama model adı, port vb.)
 ```
 
-> **Not:** `multilingual-e5-large` modeli (~2.2 GB) ilk çalıştırmada HuggingFace'den otomatik indirilir.
+### 3. Ollama'yı başlat ve modeli indir
+
+```powershell
+ollama serve
+ollama pull llama3.1:8b
+```
+
+> **Not:** `multilingual-e5-large` embedding modeli (~2.2 GB) ilk çalıştırmada HuggingFace'den otomatik indirilir.
 
 ---
 
 ## Hızlı Başlangıç
 
-### Streamlit Arayüzü (Önerilen)
+### Sunucuyu başlat
 
 ```powershell
-# Proje kök dizininden:
-app\.venv\Scripts\python.exe -m streamlit run Pages/indexing_test.py
+# Proje kök dizininden (Source_citation_QA_System/):
+app\.venv\Scripts\python.exe -m uvicorn app.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Tarayıcıda `http://localhost:8501` adresine git.
+Tarayıcıda `http://localhost:8000` adresine git — web arayüzü otomatik açılır.
+
+### Alternatif: doğrudan uvicorn
+
+```powershell
+cd app
+uvicorn api:app --reload
+```
 
 ---
 
-### Python API ile Kullanım
+## API Endpoint'leri
 
-#### Tek dosya indeksleme
+Tüm endpoint'ler `http://localhost:8000` üzerinden erişilebilir.  
+İnteraktif API dokümantasyonu için: `http://localhost:8000/docs`
 
-```python
-from app.ingestion_pipeline import IngestionPipeline
+| Metot | Endpoint | Açıklama |
+|---|---|---|
+| `GET` | `/` | Web arayüzü (index.html) |
+| `GET` | `/api/health` | Ollama ve VectorStore durumu |
+| `GET` | `/api/stats` | Sistem istatistikleri |
+| `GET` | `/api/files` | İndekslenen dosyaların listesi |
+| `POST` | `/api/upload` | Dosya yükle ve indeksle (multipart/form-data) |
+| `POST` | `/api/upload-text` | Yapıştırılan metni indeksle (JSON) |
+| `POST` | `/api/ask` | Soru sor, kaynaklı cevap al (JSON) |
+| `POST` | `/api/files/delete` | Belirli bir dokümanı sil (JSON) |
+| `POST` | `/api/reset` | Tüm veritabanını sıfırla |
 
-pipeline = IngestionPipeline(
-    chunk_mode="recursive",  # önerilen strateji
-    chunk_size=512,
-    chunk_overlap=128,
-)
+### Örnek: Soru Sorma
 
-stats = pipeline.ingest("Documents/rapor.pdf")
-print(stats)
-# {'file': '...', 'pages': 12, 'chunks': 87, 'stored': 87, 'elapsed_sec': 4.3}
+```bash
+curl -X POST http://localhost:8000/api/ask \
+  -H "Content-Type: application/json" \
+  -d '{"query": "Yapay zekanın etik sorunları nelerdir?", "top_k": 5}'
 ```
 
-#### Birden fazla dosya
-
-```python
-stats_list = pipeline.ingest_many([
-    "Documents/rapor.pdf",
-    "Documents/sunum.docx",
-    "Documents/notlar.txt",
-])
+```json
+{
+  "answer": "...",
+  "sources": ["rapor.pdf", "makale.txt"],
+  "retrieval_details": [
+    {
+      "rank": 1,
+      "score": 0.87,
+      "text": "...",
+      "source": "rapor.pdf",
+      "page": "3"
+    }
+  ]
+}
 ```
 
-#### Sorgulama (Retriever)
+### Örnek: Dosya Yükleme
 
-```python
-from app.retriever import Retriever
-
-retriever = Retriever(
-    vector_store=pipeline.vector_store,
-    default_top_k=5,
-    min_score=0.0,      # 0.0 = filtre yok; 0.5+ = yalnızca yüksek benzerlik
-)
-
-results = retriever.retrieve("Yapay zekanın etik sorunları nelerdir?", top_k=5)
-
-for r in results:
-    print(f"#{r.rank} | Skor: {r.score:.4f} | Kaynak: {r.source} | Sayfa: {r.page}")
-    print(f"  {r.text[:200]}...\n")
-```
-
-#### Konsolda raporlu arama
-
-```python
-results = retriever.retrieve_with_report(
-    query="Makine öğrenmesi nedir?",
-    top_k=3,
-    min_score=0.4,
-)
-```
-
-#### Pipeline üzerinden kısayol
-
-```python
-# pipeline.retriever → aynı VectorStore'a bağlı Retriever (lazy)
-results = pipeline.retriever.retrieve("Sorum nedir?", top_k=5)
+```bash
+curl -X POST http://localhost:8000/api/upload \
+  -F "files=@rapor.pdf" \
+  -F "chunk_mode=recursive" \
+  -F "chunk_size=512" \
+  -F "chunk_overlap=128"
 ```
 
 ---
@@ -236,6 +242,24 @@ results = pipeline.retriever.retrieve("Sorum nedir?", top_k=5)
 | `vector_store` | `None` (otomatik) | VectorStore örneği |
 
 **Metodlar:** `ingest(file_path)` · `ingest_many(file_paths)` · `search(query, n)` · `retriever` (property)
+
+---
+
+### `QAEngine`
+
+Retriever ve LLMManager'ı birleştirerek kaynak göstermeli cevap üretir.
+
+```python
+from app.qa_engine import QAEngine
+from app.retriever import Retriever
+from app.llm import LLMManager
+
+qa = QAEngine(retriever=Retriever(...), llm_manager=LLMManager())
+result = qa.ask("Sorum nedir?", top_k=5, min_score=0.0)
+
+print(result.answer)
+print(result.sources)
+```
 
 ---
 
@@ -303,21 +327,6 @@ E5 modeli `query:` ve `passage:` prefix'lerini otomatik ekler.
 
 ---
 
-## Streamlit Arayüzü
-
-`Pages/indexing_test.py` aşağıdaki özellikleri sunar:
-
-| Bölüm | Özellik |
-|---|---|
-| **Sol Panel — Yükleme** | PDF / DOCX / TXT yükle veya metin yapıştır, tek tıkla indeksle |
-| **Sağ Panel — Sorgulama** | Serbest metin sorgusu, top-k sonuç görüntüleme |
-| **Sidebar** | Chunk stratejisi, boyut, overlap, top-k, min-score ayarları |
-| **Sonuç Kartları** | Skor renk kodu (yeşil/sarı/kırmızı), metadata pill'leri, chunk metni |
-| **JSON Export** | Ham sonuçları JSON olarak görüntüle |
-| **Koleksiyon Yönetimi** | Veritabanını tek tıkla sıfırla |
-
----
-
 ## Desteklenen Dosya Formatları
 
 | Format | Kütüphane | Sayfa Desteği |
@@ -341,15 +350,39 @@ E5 modeli `query:` ve `passage:` prefix'lerini otomatik ekler.
 
 ---
 
+## Yapılandırma (.env)
+
+`.env.example` dosyasını kopyalayarak `.env` oluşturun:
+
+| Değişken | Varsayılan | Açıklama |
+|---|---|---|
+| `OLLAMA_MODEL` | `llama3.1:8b` | Kullanılacak Ollama modeli |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama sunucu adresi |
+| `OLLAMA_TEMPERATURE` | `0.1` | LLM yanıt sıcaklığı |
+| `OLLAMA_TIMEOUT` | `120` | İstek zaman aşımı (saniye) |
+| `EMBEDDING_MODEL` | `intfloat/multilingual-e5-large` | HuggingFace embedding modeli |
+| `EMBEDDING_DEVICE` | (otomatik) | `cpu` veya `cuda` |
+| `CHROMA_COLLECTION` | `source_citation_qa` | ChromaDB koleksiyon adı |
+| `CHROMA_PERSIST_DIR` | `./chroma_db` | ChromaDB depolama dizini |
+| `SERVER_HOST` | `0.0.0.0` | Sunucu bind adresi |
+| `SERVER_PORT` | `8000` | Sunucu portu |
+| `MAX_FILE_SIZE_MB` | `50` | Yüklenebilecek maksimum dosya boyutu |
+| `MAX_TEXT_LENGTH` | `500000` | Yapıştırılan metin için karakter limiti |
+| `MAX_QUERY_LENGTH` | `2000` | Sorgu için karakter limiti |
+
+---
+
 ## Bağımlılıklar
 
 ```
 Python       >= 3.12
-llama-index  >= 0.14.23    # RAG orkestrasyon
-chromadb     >= 1.5.9      # Vektör veritabanı
-transformers >= 4.40.0     # HuggingFace model yükleme
-torch        >= 2.0.0      # Model çalıştırma (CPU/GPU)
-pymupdf      >= 1.28.0     # PDF okuma
-python-docx  >= 1.2.0      # DOCX okuma
-streamlit    >= 1.60.0     # Web arayüzü
+fastapi      >= 0.115.0   # REST API framework
+uvicorn      >= 0.34.0    # ASGI sunucu
+llama-index  >= 0.14.23   # RAG orkestrasyon
+chromadb     >= 1.5.9     # Vektör veritabanı
+transformers >= 4.40.0    # HuggingFace model yükleme
+torch        >= 2.0.0     # Model çalıştırma (CPU/GPU)
+pymupdf      >= 1.28.0    # PDF okuma
+python-docx  >= 1.2.0     # DOCX okuma
+python-dotenv >= 1.2.2    # .env desteği
 ```
